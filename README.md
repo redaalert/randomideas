@@ -396,6 +396,20 @@ def reliance(model, x_ent, mask=test_mask):
     pa, pz = lg_a[mask].argmax(1).numpy(), lg_z[mask].argmax(1).numpy()
     f1 = lambda p: f1_score(yt, p, average="macro", zero_division=0)
     return f1(pa), f1(pz), (pa == pz).mean()
+variantes = {
+    "BASE":       dict(access_only=False, p_user_drop=0),
+    "userDrop":   dict(access_only=False, p_user_drop=0.8),
+    "accessOnly": dict(access_only=True,  p_user_drop=0),
+}
+rows = []
+for nom, kw in variantes.items():
+    m_v, _, _ = entrainer(hidden_dim=HD, lr=LR, n_epochs=300, dims_emb=dims_embedding, seed=0, **kw)
+    f1_a, f1_z, accord = reliance(m_v, x_ent_full)
+    ao_v = kw["access_only"]
+    rows.append(dict(model=nom, f1_features_actives=f1_a,
+                     f1_features_a_zero=None if ao_v else f1_z,
+                     accord_predictions=None if ao_v else accord))
+display(pd.DataFrame(rows).round(4))
 ```
 
 **What we expect.** A model trained without dropout (`BASE`) has never seen a user without features, so it should lose a lot when the features are zeroed. A model trained with dropout (`userDrop`) has been trained on exactly this situation, so it should lose little, reach a score close to `accessOnly`, and keep most of its predictions unchanged. A dropout model that still collapses would indicate that the dropout rate is too low.
