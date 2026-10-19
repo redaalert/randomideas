@@ -412,7 +412,15 @@ for nom, kw in variantes.items():
 display(pd.DataFrame(rows).round(4))
 ```
 
-**What we expect.** A model trained without dropout (`BASE`) has never seen a user without features, so it should lose a lot when the features are zeroed. A model trained with dropout (`userDrop`) has been trained on exactly this situation, so it should lose little, reach a score close to `accessOnly`, and keep most of its predictions unchanged. A dropout model that still collapses would indicate that the dropout rate is too low.
+The results reveal a strong dependence on user features for both models.
+
+For `BASE`, test macro-F1 falls from 0.8388 to 0.1155 when all user features are zeroed. For `userDrop`, it falls from 0.8225 to 0.1733. In both cases, the resulting scores are substantially lower than the 0.7102 test macro-F1 obtained by `accessOnly`, which is trained without user features from the beginning.
+
+The prediction agreement is also low: only 39.87 % for `BASE` and 38.09 % for `userDrop`. This means that zeroing the user features changes the predicted FRC for most test users. The model's predictions are therefore strongly influenced by organisational attributes, rather than being determined primarily by the access graph.
+
+**What this means for `userDrop`.** Although dropout does not eliminate the model's reliance on user features, `userDrop` remains a promising candidate. It achieves the best test macro-F1 (0.84) and balanced accuracy (0.92) in the ablation grid. Its score with features zeroed (0.1733) is also higher than that of `BASE` (0.1155), suggesting some improvement in its ability to cope without those features. However, this improvement remains limited, and the zeroed-feature score is still far below the `accessOnly` reference (0.7102).
+
+Consequently, `userDrop` will still be considered for the next stage of the project. Rather than discarding it because of its reliance on user features, the next experiments will investigate whether tuning the dropout rate can preserve its strong classification performance while encouraging the model to learn more from access patterns. Its usefulness will ultimately be judged by its ability to identify users with potentially incorrect FRCs, not by macro-F1 alone.
 
 **A limit of the check.** With per-user dropout, the model is trained on graphs where a share of the users has no features, never on a graph where every user has none. Zeroing all users at inference is therefore a slightly new situation for the model, so this check is an indicator rather than the exact performance of an `accessOnly` model.
 
@@ -422,11 +430,11 @@ display(pd.DataFrame(rows).round(4))
 
 Steps 1 to 3 say whether the model is sound. They do not say whether it finds the right users. Two independent pieces of evidence are available: the compliance controls, and the review done by the compliance team.
 
-**Agreement with the controls (planned).** On the users decided by the control, the controlled FRC is an independent point of comparison. The planned check compares the FRC predicted out-of-fold with `controlledFRC` on these users, and reports the metrics separately for the controlled and the undecided users. A high agreement would be encouraging for the longer-term goal of replacing the controls, since it would mean that the model recovers by itself what the if/else rules encode. It is not required for the current deliverable. One caution applies: the four rules are written on `DMA FOS` and cost-centre descriptions, which are inputs of the model, so a high agreement can be obtained from these features alone. It says little about the accesses unless the `accessOnly` model agrees as well, so the agreement should be reported for each variant. A low agreement on a subset of FRCs would be informative too, since it either points at limits of the model or at controls that do not match the declared FRCs. Because the controls cover only five of the eight FRCs, this agreement can only be measured on those.
+**Agreement with the controls (planned).** On the users decided by the control, the controlled FRC is an independent point of comparison. The planned check compares the FRC predicted out-of-fold with `controlledFRC` on these users, and reports the metrics separately for the controlled and the undecided users. A high agreement would be encouraging for the longer-term goal of replacing the controls, since it would mean that the model recovers by itself what the if/else rules encode. It is not required for the current deliverable. A low agreement on a subset of FRCs would be informative too, since it either points at limits of the model or at controls that do not match the declared FRCs. Because the controls cover only five of the eight FRCs, this agreement can only be measured on those.
 
 **Stability.** The top 100 users should largely overlap between seeds and folds, otherwise the ranking is not reliable enough to hand to compliance.
 
-**Human review.** Compliance returns the confirmed FRC of the users of the list, the top 20 and 20 random users. Comparing how often the declared FRC and the model's FRC are confirmed in each sample shows whether the top of the ranking is really worse than an ordinary user. The first review is reported in [section 8](#results-of-the-first-compliance-review).
+**Human review.** Compliance returns the confirmed FRC of the users of the list, the top 20 and 20 random users. Comparing how often the declared FRC and the model's FRC are confirmed in each sample shows whether the top of the ranking is really worse than an ordinary user. The first review is reported in [Section 8](#results-of-the-first-compliance-review).
 
 ### 7.5 Baselines
 
