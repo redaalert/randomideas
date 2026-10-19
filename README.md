@@ -30,7 +30,7 @@
 
 Within the Identity and Access Management (IAM) perimeter of the bank, each user holds a set of **entitlements** (access rights on applications). Every user carries a declared **FRC (Functional Role Code)** describing their functional role, and every entitlement lists the FRC(s) that are authorised to hold it. By definition, an access is a violation when the user's FRC is not among the FRCs authorised for the entitlement (`userFRC ∉ set(entitlementFRCs)`). Because this rule is deterministic, the real question is not which individual accesses look suspicious, but whether the **user's FRC is correct**: once the FRC is right, the status of every access follows from it.
 
-The compliance team already applies a set of **controls** to the FRCs. These controls are plain if/else rules. For about 2,000 of the roughly 5,000 users, they settle the FRC with certainty: the output table (`result`) then carries a `decision` different from `unknown` and a `controlledFRC`. Their reach is limited, though. They only cover five of the eight possible FRCs, and for the remaining 3,000 or so users the decision is `unknown`.
+The compliance team defined four **controls** on the FRCs (listed in [2.5](#25-compliance-controls)). They are plain if/else rules written on the organisation of the user (desk, cost centre). The compliance team did not send us the results: at their request, we automated the four controls and applied them to the user table, which produced the output table `result`. For about 2,000 of the roughly 5,000 users, the controls settle the FRC with certainty: `result` then carries a `decision` different from `unknown` and a `controlledFRC`. Their reach is limited, though. They only cover five of the eight possible FRCs, and for the remaining 3,000 or so users the decision is `unknown`.
 
 An earlier version of this project made a wrong assumption: it applied the controls to the data first and fed the resulting labels to the model, as if the controls were a general ground truth. That is no longer the case. The controls are an independent but partial opinion, valid on a subset of users and a subset of FRCs. They are not used as labels.
 
@@ -38,7 +38,7 @@ An earlier version of this project made a wrong assumption: it applied the contr
 
 The model learns, from the declared FRC, what access profile corresponds to each FRC, using the user's attributes and the entitlements they hold (message passing on the user–entitlement graph). Because it is scored out-of-fold, each user receives a probability for their declared FRC from a model that never saw them. When that probability is low, the accesses of the user look like those of other users with a different FRC, so either the declared FRC is wrong or the user holds accesses that belong to another role. The users to send to the compliance team are therefore those with the **highest loss**, restricted to the cases where a review adds information: users for whom the control is `unknown`, or users for whom the control gives an FRC that differs from the one predicted by the model. Where the control already gives an answer that the model corroborates, the control covers the case and no review is requested.
 
-The longer-term ambition is for the model to replace the controls. It would be ideal if it learned them by itself, since the controls should make sense given the data, and it would then give an answer for the 3,000 or so users the controls cannot settle. This is not required for the current deliverable.
+The longer-term ambition is for the model to replace the controls. It would be ideal if it learned them by itself, since the controls should make sense given the data, and it would then give an answer for the 3,000 or so users the controls cannot settle. This is not required for the current deliverable. Since the controls are written on organisational attributes, reproducing them does not prove that the model reads the accesses: the added value of the accesses lies with the users the controls cannot settle.
 
 **Core idea:** the declared FRC is the training target and the **access profile is the evidence**. The controls serve as a second opinion used to prioritise the review.
 
@@ -48,7 +48,7 @@ The longer-term ambition is for the model to replace the controls. It would be i
 
 ### 2.1 Source tables
 
-Received on 2026-09-11 (snapshot dated September 2026), four tables, completed by the output of the compliance controls:
+Received on 2026-09-11 (snapshot dated September 2026), four tables, completed by the output of the controls, which we generated ourselves (see [2.5](#25-compliance-controls)):
 
 | Table | Content |
 |---|---|
@@ -56,7 +56,7 @@ Received on 2026-09-11 (snapshot dated September 2026), four tables, completed b
 | `GM_USER_ACCESS_SEP` | One row per user access: `UID`, application, entitlement, user FRC, entitlement FRC, `ViolationStatus`, user type (FO / non-FO) |
 | `MyIAMApplicationData20260907` | Application metadata (`AUID`, `ApplicationName`, business line, priority, ...) |
 | `Application EntitlementData_20260907` | Entitlement metadata: multi-valued `EntitlementFRCs`, owners, creation and modification dates, official confidentiality and integrity, AppSec profile |
-| Compliance controls output (`result`) | One row per user processed by the controls: `UID`, `decision` (`unknown` or not), `controlledFRC` |
+| Controls output (`result`) | Generated by us on 2026-10-15: the four automated controls applied to `df_users_gm`, enriched with `GM Users - DMA FOS.xlsx`. One row per user: `UID`, `decision` (`unknown` or not), `controlledFRC` |
 
 ### 2.2 Working dataframes
 
@@ -65,7 +65,7 @@ Received on 2026-09-11 (snapshot dated September 2026), four tables, completed b
 | `df_users_gm` | 1 row per user | User features and declared `User_FRC` |
 | `df_users_access` | 1 row per (user, entitlement) | Edges of the graph, with `ViolationStatus` |
 | `df_entdata` | 1 row per entitlement held by at least one GM user | Entitlement metadata (dates, FRCs, confidentiality, integrity, AppSec profile) |
-| `result` | 1 row per user | Output of the compliance controls (`decision`, `controlledFRC`) |
+| `result` | 1 row per user | Output of the four controls, computed by us (`decision`, `controlledFRC`) |
 | `df_apps_merged` | 1 row per application | Application metadata, merged from several per-environment sheets (not yet used in the graph) |
 
 `df_users_gm` and `df_users_access` contain exactly the same set of `UID`. The entitlements of `df_entdata` are a subset of the (much larger) enterprise entitlement catalogue.
@@ -108,9 +108,24 @@ The training target is the declared `User_FRC`, for every user. It is not overwr
 - FRCs with fewer than 5 users are grouped into `AUTRE` (too few examples to learn from);
 - users with a missing FRC (`MISSING`) or an `AUTRE` FRC are **always masked**: they are excluded from the loss, the validation set and the test set, but they stay in the graph and keep propagating messages.
 
-### 2.5 Compliance controls and `ViolationStatus`
+### 2.5 Compliance controls
+
+The compliance team defined four controls. We automated them at their request and applied them to `df_users_gm`, enriched with the file `GM Users - DMA FOS.xlsx`, on 2026-10-15. The resulting file is `result`.
+
+| Control | Rule |
+|---|---|
+| 1 | If `DMA FOS` = Trading, the FRC must be Front Office-Trading or Front Office-Sales Trading (the Excel version applies it to users whose status is Ok) |
+| 2 | If `DMA FOS` = Sales, the FRC must be Front Office-Sales |
+| 3 | If the user (headcount) belongs to eCommerce Client Solutions (`cc_desc3`), the FRC must be Front Office-COO Transversal Electronic Client Solutions |
+| 4 | If the user belongs to one of the following cost centres, the FRC must be Front Office-Others: Business Development, Client Development, COO Office (excluding eCommerce Client Solutions), Management, Markets 360, PRM Team, Quant Research (e-FIC and Lab), Quantitative Research, Strategic Oversight Office, Support function/Assistants |
+
+These four rules cover five FRCs, which is why the controls only reach five of the eight FRCs. Used in this project, a rule that applies to a user gives the FRC they must hold, and when no rule applies, `decision` is `unknown`.
+
+All four rules are written on `DMA FOS` and on cost-centre descriptions, which are also inputs of the model (one-hot for `DMA FOS`, embeddings for `cc_desc3` and `cc_desc5`). The controls are therefore a function of the model's features, a point that matters for interpreting the agreement between the model and the controls ([7.4](#74-agreement-with-the-controls-and-stability)).
 
 The controls are not part of the training signal. They are kept in an aligned structure (`controlled_aligned`, `is_controlled`) and used for two purposes: choosing which users enter the compliance deliverable ([section 8](#8-scoring-and-compliance-deliverable)) and, as planned, measuring whether the model retrieves the controls by itself ([section 7.4](#74-agreement-with-the-controls-and-stability)).
+
+### 2.6 `ViolationStatus`
 
 The `ViolationStatus` field is entered manually and covers only a limited share of accesses. Since an access is a violation exactly when the user's FRC is not authorised by the entitlement, this flag is a consequence of the FRC and no longer an independent label. It is not used as an edge attribute. Accesses with a non-null `ViolationStatus` are **removed from the graph for all users**, so every user is treated in the same way. Users whose accesses are all flagged disappear from the graph and are not scored.
 
@@ -211,7 +226,7 @@ The convolution is `SAGEConv`. For each node, it combines a transformation of th
 
 The output is used in two ways. In training, the model learns which accesses are typical of each FRC. At scoring time, a confident disagreement between the predicted FRC and the declared FRC, obtained **out-of-fold**, means that the user's accesses look like those of another role. This is the signal that, combined with the status of the compliance control, determines the users sent for review (see [section 8](#8-scoring-and-compliance-deliverable)). If the model turns out to reproduce the controls, the same output could later give an answer for the users the controls cannot settle.
 
-**Main risk: learning the FRC from the organisation instead of the accesses.** Cost centre, region and team may almost determine the FRC. A model that can read them can reproduce the declared FRC without looking at the accesses, and a user whose accesses do not fit their FRC would then still be "predicted" as their declared FRC, which hides the case. Two ways to counter this are compared:
+**Main risk: learning the FRC from the organisation instead of the accesses.** Cost centre, region and team may almost determine the FRC. The compliance controls themselves are written on `DMA FOS` and cost-centre descriptions, which shows how directly these attributes can fix the FRC for part of the users. A model that can read them can reproduce the declared FRC without looking at the accesses, and a user whose accesses do not fit their FRC would then still be "predicted" as their declared FRC, which hides the case. Two ways to counter this are compared:
 
 - **remove** the user features (`accessOnly`): any mismatch comes from the accesses, but the task is harder;
 - **keep** them but train the model to cope without them (**user-feature dropout**, see [5.3](#53-user-feature-dropout)): the model can use the organisation when it helps, but is forced to learn what the accesses say.
@@ -393,7 +408,7 @@ def reliance(model, x_ent, mask=test_mask):
 
 Steps 1 to 3 say whether the model is sound. They do not say whether it finds the right users. Two independent pieces of evidence are available: the compliance controls, and the review done by the compliance team.
 
-**Agreement with the controls (planned).** On the users decided by the control, the controlled FRC is an independent point of comparison. The planned check compares the FRC predicted out-of-fold with `controlledFRC` on these users, and reports the metrics separately for the controlled and the undecided users. A high agreement would be encouraging for the longer-term goal of replacing the controls, since it would mean that the model recovers by itself what the if/else rules encode. It is not required for the current deliverable. A low agreement on a subset of FRCs would be informative too, since it either points at limits of the model or at controls that do not match the declared FRCs. Because the controls cover only five of the eight FRCs, this agreement can only be measured on those.
+**Agreement with the controls (planned).** On the users decided by the control, the controlled FRC is an independent point of comparison. The planned check compares the FRC predicted out-of-fold with `controlledFRC` on these users, and reports the metrics separately for the controlled and the undecided users. A high agreement would be encouraging for the longer-term goal of replacing the controls, since it would mean that the model recovers by itself what the if/else rules encode. It is not required for the current deliverable. One caution applies: the four rules are written on `DMA FOS` and cost-centre descriptions, which are inputs of the model, so a high agreement can be obtained from these features alone. It says little about the accesses unless the `accessOnly` model agrees as well, so the agreement should be reported for each variant. A low agreement on a subset of FRCs would be informative too, since it either points at limits of the model or at controls that do not match the declared FRCs. Because the controls cover only five of the eight FRCs, this agreement can only be measured on those.
 
 **Stability.** The top 100 users should largely overlap between seeds and folds, otherwise the ranking is not reliable enough to hand to compliance.
 
@@ -509,6 +524,7 @@ Two complementary levels are planned. At the **global** level, permutation impor
 - **The deliverable flags users, not accesses:** when a user is reported because the predicted FRC differs from the declared one, the list does not say which access looks abnormal. All the work of finding the problematic access is left to the compliance team, which is slow and makes the signal harder to act on. The model has the information to do better: the access (or the few accesses) that contribute most to its decision can be identified and given to compliance as the potential violation. They remain candidates to verify and not proven violations, because the influence of an access on the prediction is not the same thing as the access being inappropriate.
 - **Removal of flagged accesses:** accesses with a `ViolationStatus` are removed for all users. These are the accesses that contradict the declared FRC, so the remaining graph is more consistent with it, which lowers the loss and can hide part of the mismatches. Users whose accesses are all flagged are not scored.
 - **Partial controls:** the controls cover about 2,000 users out of 5,000 and five FRCs out of eight, so agreement with them can only be measured on that subset, and the users they cannot settle are not necessarily comparable with the ones they can.
+- **The controls are functions of model inputs:** the four rules use `DMA FOS` and cost-centre descriptions, which the model also receives. The model can reproduce the controls without looking at the accesses, so agreement with them does not show that the accesses are used. The comparison with `accessOnly` and the reliance check ([7.3](#73-reliance-on-user-features)) address this.
 - **Possible shortcut through organisational attributes:** cost-centre or team features may almost determine the FRC, which would hide access-related mismatches. This is checked with the `accessOnly` variant and mitigated with user-feature dropout.
 - **Dropout is a mitigation, not a guarantee:** the features are still available at inference, so the model may still lean on them. The reliance check ([7.3](#73-reliance-on-user-features)) measures this. The dropout rate has not been tuned, and the zeroed-feature check is slightly outside the training distribution.
 - **Class imbalance and probability calibration:** the weighted loss shifts the probabilities. Scores should be compared within the declared FRC, or calibrated, before being used as risk levels.
@@ -587,7 +603,7 @@ Python, pandas, numpy, scikit-learn, PyTorch, PyTorch Geometric. A GPU is used w
 | Entitlement | Access right on an application |
 | Bundle | Set of entitlements assigned together |
 | Violation (access) | An access whose entitlement does not list the user's FRC: `userFRC ∉ set(entitlementFRCs)`. A deterministic consequence of the FRC |
-| Control (compliance) | If/else rules applied by the compliance team to the FRCs. They settle the FRC with certainty for part of the users and cover five of the eight FRCs |
+| Control (compliance) | Four if/else rules defined by the compliance team on organisational attributes (`DMA FOS`, cost centre) and automated by us. They settle the FRC with certainty for part of the users and cover five of the eight FRCs |
 | `decision` / `controlledFRC` | Output of the control for a user: `unknown` when it cannot settle, otherwise the FRC it determines |
 | OOF | Out-of-fold: a prediction made by a model that did not train on that user |
 | SAGEConv | GraphSAGE convolution: combines a node's own representation with the mean of its neighbours' |
