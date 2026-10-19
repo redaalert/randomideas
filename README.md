@@ -5,27 +5,12 @@
 > Items marked `TBD` are figures to fill in from the latest run (see [Descriptive statistics](#3-descriptive-statistics) for the code that produces them).
 >
 > **What changed since the 2026-10-12 version:** the compliance controls are no longer used as ground truth. They are used after the model, to decide which users are sent for review. The model is trained on the declared FRC only. The convolution is now `SAGEConv` (previously `GATv2Conv`), the violation edge attribute and the residual connections are gone, and accesses carrying a `ViolationStatus` are removed from the graph for all users. The out-of-fold scoring now covers all usable users.
-> 878120
-F13368
-672611
-E04864
-J36653
-E31736
-E59653
-877869
-478035
-E31587
-G00330
-942501
-H98282
-F99031
-387801
-F67557
-973656
-A31053
-238026
-
-
+codes = [
+    "F13319", "F98422", "136621", "E59636", "973455",
+    "876977", "A30647", "671507", "476924", "235860",
+    "E04850", "877467", "H9B227", "F31581", "H9B030",
+    "F65134", "G00203", "941744", "E31733", "387220"
+]
 ## Table of contents
 
 1. [Context and objective](#1-context-and-objective)
