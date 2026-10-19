@@ -580,6 +580,7 @@ Two complementary levels are planned. At the **global** level, permutation impor
 - [ ] **Point compliance to the potential violating access.** For each flagged user, identify the access (or the top few) that contributes most to the model's decision, and give it to compliance as the main candidate violation. The most reliable way is the per-access ablation described in [section 9](#9-explainability), which measures how much the probability of the declared FRC changes when an access is removed. The access that activates most during inference is a cheaper complementary signal, but a less reliable explanation.
 - [ ] Explainability: permutation importance by feature group and per-access ablation.
 - [ ] Extend the graph with Application and Bundle nodes.
+- [ ] Send the updated compliance deliverable to the compliance team, using the new filtering criteria and the selected `userDrop` model, to review the newly ranked users and assess whether the updated approach better identifies users with potentially incorrect FRCs.
 - [ ] Refactor the notebook into a modular `src/` package.
 
 ---
