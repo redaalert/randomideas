@@ -42,6 +42,20 @@ An earlier version of this project made a wrong assumption: it applied the contr
 ### Objective
 
 The model learns, from the declared FRC, what access profile corresponds to each FRC, using the user's attributes and the entitlements they hold (message passing on the user–entitlement graph). Because it is scored out-of-fold, each user receives a probability for their declared FRC from a model that never saw them. When that probability is low, the accesses of the user look like those of other users with a different FRC, so either the declared FRC is wrong or the user holds accesses that belong to another role. The users to send to the compliance team are therefore those with the **highest loss**, restricted to the cases where a review adds information: users for whom the control is `unknown`, or users for whom the control gives an FRC that differs from the one predicted by the model. Where the control already gives an answer that the model corroborates, the control covers the case and no review is requested.
+def ablation_features_ent(uid, model, x_ent, cible):
+    i = uid2i[uid]; c = lab_idx[cible]
+    model.eval()
+    def probs(x_):
+        with torch.no_grad():
+            lg, _ = model(x_user_num, x_user_emb, edge_index_dict_base, x_)
+        return F.softmax(lg[i], dim=0)
+    p0 = probs(x_ent); p = int(p0.argmax())
+    rows = []
+    for j, nom in enumerate(ent_features_full.columns):
+        x2 = x_ent.clone(); x2[:, j] = 0
+        p1 = probs(x2)
+        rows.append({"feature": nom, "d_pred": (p0[p] - p1[p]).item(), "d_cible": (p1[c] - p0[c]).item()})
+    return pd.DataFrame(rows).sort_values("d_pred", ascending=False)
 
 The longer-term ambition is for the model to replace the controls. It would be ideal if it learned them by itself, since the controls should make sense given the data, and it would then give an answer for the 3,000 or so users the controls cannot settle. This is not required for the current deliverable. Since the controls are written on organisational attributes, reproducing them does not prove that the model reads the accesses: the added value of the accesses lies with the users the controls cannot settle.
 
