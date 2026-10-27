@@ -5,13 +5,34 @@
 > Items marked `TBD` are figures to fill in from the latest run (see [Descriptive statistics](#3-descriptive-statistics) for the code that produces them).
 >
 > **What changed since the 2026-10-12 version:** the compliance controls are no longer used as ground truth. They are used after the model, to decide which users are sent for review. The model is trained on the declared FRC only. The convolution is now `SAGEConv` (previously `GATv2Conv`), the violation edge attribute and the residual connections are gone, and accesses carrying a `ViolationStatus` are removed from the graph for all users. The out-of-fold scoring now covers all usable users.
-codes = [
-    "F13319", "F98422", "136621", "E59636", "973455",
-    "876977", "A30647", "671507", "476924", "235860",
-    "E04850", "877467", "H9B227", "F31581", "H9B030",
-    "F65134", "G00203", "941744", "E31733", "387220"
-]
-## Table of contents
+# --- Export Excel : tous les users de df_users_gm ---
+OUT_PATH = "frc_predictions_all_users.xlsx"
+
+# FRC déclaré : directement depuis df_users_gm (UID normalisé comme dans controlled_frc)
+gm = df_users_gm[["UID", "User_FRC"]].copy()
+gm["UID"] = gm["UID"].astype("string").str.strip()
+gm = gm.drop_duplicates("UID").set_index("UID")
+
+# FRC prédit : uniquement les users de idx_known, les autres restent vides
+p_known = oof_probs[idx_known]
+idx_ok = p_known.sum(dim=1).numpy() > 0            # garde-fou : jamais d'argmax sur une ligne de zéros
+uid_known = pd.Index(pd.Series(X.index[idx_known]).astype("string").str.strip())
+pred = pd.Series(np.asarray(frc_labels_final)[p_known.argmax(dim=1).numpy()], index=uid_known).where(idx_ok)
+
+def vide(s):                                       # pd.NA -> NaN pour que to_excel écrive une cellule vide
+    s = pd.Series(s)
+    return s.astype(object).where(s.notna(), np.nan).to_numpy()
+
+out = pd.DataFrame({
+    "user_id": gm.index.astype(str),
+    "frc_declare": vide(gm["User_FRC"].replace("MISSING", np.nan)),
+    "frc_predite": vide(pred.reindex(gm.index)),
+    "Adage Controls": vide(controlled_frc.reindex(gm.index)),
+})
+
+out.to_excel(OUT_PATH, index=False)
+print(f"{OUT_PATH} : {len(out)} users | prédits : {out['frc_predite'].notna().sum()} | "
+      f"sans prédiction : {out['frc_predite'].isna().sum()} | avec contrôle : {out['Adage Controls'].notna().sum()}")## Table of contents
 
 1. [Context and objective](#1-context-and-objective)
 2. [Data description](#2-data-description)
