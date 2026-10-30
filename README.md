@@ -5,34 +5,8 @@
 > Items marked `TBD` are figures to fill in from the latest run (see [Descriptive statistics](#3-descriptive-statistics) for the code that produces them).
 >
 > **What changed since the 2026-10-12 version:** the compliance controls are no longer used as ground truth. They are used after the model, to decide which users are sent for review. The model is trained on the declared FRC only. The convolution is now `SAGEConv` (previously `GATv2Conv`), the violation edge attribute and the residual connections are gone, and accesses carrying a `ViolationStatus` are removed from the graph for all users. The out-of-fold scoring now covers all usable users.
-# --- Export Excel : tous les users de df_users_gm ---
-OUT_PATH = "frc_predictions_all_users.xlsx"
-
-# FRC déclaré : directement depuis df_users_gm (UID normalisé comme dans controlled_frc)
-gm = df_users_gm[["UID", "User_FRC"]].copy()
-gm["UID"] = gm["UID"].astype("string").str.strip()
-gm = gm.drop_duplicates("UID").set_index("UID")
-
-# FRC prédit : uniquement les users de idx_known, les autres restent vides
-p_known = oof_probs[idx_known]
-idx_ok = p_known.sum(dim=1).numpy() > 0            # garde-fou : jamais d'argmax sur une ligne de zéros
-uid_known = pd.Index(pd.Series(X.index[idx_known]).astype("string").str.strip())
 pred = pd.Series(np.asarray(frc_labels_final)[p_known.argmax(dim=1).numpy()], index=uid_known).where(idx_ok)
 
-def vide(s):                                       # pd.NA -> NaN pour que to_excel écrive une cellule vide
-    s = pd.Series(s)
-    return s.astype(object).where(s.notna(), np.nan).to_numpy()
-
-out = pd.DataFrame({
-    "user_id": gm.index.astype(str),
-    "frc_declare": vide(gm["User_FRC"].replace("MISSING", np.nan)),
-    "frc_predite": vide(pred.reindex(gm.index)),
-    "Adage Controls": vide(controlled_frc.reindex(gm.index)),
-})
-
-out.to_excel(OUT_PATH, index=False)
-print(f"{OUT_PATH} : {len(out)} users | prédits : {out['frc_predite'].notna().sum()} | "
-      f"sans prédiction : {out['frc_predite'].isna().sum()} | avec contrôle : {out['Adage Controls'].notna().sum()}")## Table of contents
 
 1. [Context and objective](#1-context-and-objective)
 2. [Data description](#2-data-description)
@@ -63,20 +37,6 @@ An earlier version of this project made a wrong assumption: it applied the contr
 ### Objective
 
 The model learns, from the declared FRC, what access profile corresponds to each FRC, using the user's attributes and the entitlements they hold (message passing on the user–entitlement graph). Because it is scored out-of-fold, each user receives a probability for their declared FRC from a model that never saw them. When that probability is low, the accesses of the user look like those of other users with a different FRC, so either the declared FRC is wrong or the user holds accesses that belong to another role. The users to send to the compliance team are therefore those with the **highest loss**, restricted to the cases where a review adds information: users for whom the control is `unknown`, or users for whom the control gives an FRC that differs from the one predicted by the model. Where the control already gives an answer that the model corroborates, the control covers the case and no review is requested.
-def ablation_features_ent(uid, model, x_ent, cible):
-    i = uid2i[uid]; c = lab_idx[cible]
-    model.eval()
-    def probs(x_):
-        with torch.no_grad():
-            lg, _ = model(x_user_num, x_user_emb, edge_index_dict_base, x_)
-        return F.softmax(lg[i], dim=0)
-    p0 = probs(x_ent); p = int(p0.argmax())
-    rows = []
-    for j, nom in enumerate(ent_features_full.columns):
-        x2 = x_ent.clone(); x2[:, j] = 0
-        p1 = probs(x2)
-        rows.append({"feature": nom, "d_pred": (p0[p] - p1[p]).item(), "d_cible": (p1[c] - p0[c]).item()})
-    return pd.DataFrame(rows).sort_values("d_pred", ascending=False)
 
 The longer-term ambition is for the model to replace the controls. It would be ideal if it learned them by itself, since the controls should make sense given the data, and it would then give an answer for the 3,000 or so users the controls cannot settle. This is not required for the current deliverable. Since the controls are written on organisational attributes, reproducing them does not prove that the model reads the accesses: the added value of the accesses lies with the users the controls cannot settle.
 
